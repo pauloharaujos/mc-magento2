@@ -53,17 +53,22 @@ class Customer
      * @var string
      */
     protected $_batchId;
+	/**
+	 * @var \Magento\Newsletter\Model\Subscriber
+	 */
+	protected $subscriber;
 
-    /**
-     * Customer constructor.
-     * @param \Ebizmarts\MailChimp\Helper\Data $helper
-     * @param \Magento\Customer\Model\CustomerFactory $customerFactory
-     * @param \Magento\Customer\Model\ResourceModel\Customer\CollectionFactory $collection
-     * @param \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderCollection
-     * @param CountryFactory $countryFactory
-     * @param \Magento\Customer\Model\Address $address
-     * @param \Magento\Newsletter\Model\SubscriberFactory $subscriberFactory
-     */
+	/**
+	 * Customer constructor.
+	 * @param \Ebizmarts\MailChimp\Helper\Data $helper
+	 * @param \Magento\Customer\Model\CustomerFactory $customerFactory
+	 * @param \Magento\Customer\Model\ResourceModel\Customer\CollectionFactory $collection
+	 * @param \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderCollection
+	 * @param CountryFactory $countryFactory
+	 * @param \Magento\Customer\Model\Address $address
+	 * @param \Magento\Newsletter\Model\SubscriberFactory $subscriberFactory
+	 * @param \Magento\Newsletter\Model\Subscriber $subscriber
+	 */
     public function __construct(
         \Ebizmarts\MailChimp\Helper\Data $helper,
         \Magento\Customer\Model\CustomerFactory $customerFactory,
@@ -71,9 +76,10 @@ class Customer
         \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderCollection,
         \Magento\Directory\Model\CountryFactory $countryFactory,
         \Magento\Customer\Model\Address $address,
-        \Magento\Newsletter\Model\SubscriberFactory $subscriberFactory
+        \Magento\Newsletter\Model\SubscriberFactory $subscriberFactory,
+		\Magento\Newsletter\Model\Subscriber $subscriber
     ) {
-    
+
         $this->_helper              = $helper;
         $this->_collection          = $collection;
         $this->_orderCollection     = $orderCollection;
@@ -83,6 +89,7 @@ class Customer
         $this->_customerFactory     = $customerFactory;
         $this->_countryFactory      = $countryFactory;
         $this->subscriberFactory    = $subscriberFactory;
+		$this->subscriber   		= $subscriber;
     }
     public function sendCustomers($storeId)
     {
@@ -198,7 +205,16 @@ class Customer
         $data["email_address"] = $customer->getEmail() ? $customer->getEmail() : '';
         $data["first_name"] = $customer->getFirstname() ? $customer->getFirstname() : '';
         $data["last_name"] = $customer->getLastname() ? $customer->getLastname() : '';
-        $data["opt_in_status"] = $this->getOptin();
+		$data["opt_in_status"] = false;
+        if($this->getOptin()) {
+			$data["opt_in_status"] = true;
+		} else {
+			$checkSubscriber = $this->subscriber->loadByEmail($customer->getEmail());
+			if ($checkSubscriber->isSubscribed()) {
+				// Customer is subscribed on Magento Newsletter, so let's subscribe on Mailchimp too
+				$data["opt_in_status"] = true;
+			}
+		}
         // customer order data
         $orderCollection = $this->_orderCollection->create();
         $orderCollection->addFieldToFilter('state', [

@@ -57,19 +57,25 @@ class Cart
      * @var \Magento\Framework\Url
      */
     protected $_urlHelper;
+	/**
+	 * @var Magento\Newsletter\Model\Subscriber
+	 */
+	protected $subscriber;
 
-    /**
-     * Cart constructor.
-     * @param \Ebizmarts\MailChimp\Helper\Data $helper
-     * @param \Magento\Quote\Model\ResourceModel\Quote\CollectionFactory $quoteColletcion
-     * @param \Magento\Customer\Model\CustomerFactory $customerFactory
-     * @param Product $apiProduct
-     * @param Customer $apiCustomer
-     * @param \Magento\Directory\Model\CountryFactory $countryFactory
-     * @param \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderCollectionFactory
-     * @param \Magento\Framework\Url $urlHelper
-     */
+	/**
+	 * Cart constructor.
+	 * @param Magento\Newsletter\Model\Subscriber $subscriber
+	 * @param \Ebizmarts\MailChimp\Helper\Data $helper
+	 * @param \Magento\Quote\Model\ResourceModel\Quote\CollectionFactory $quoteColletcion
+	 * @param \Magento\Customer\Model\CustomerFactory $customerFactory
+	 * @param Product $apiProduct
+	 * @param Customer $apiCustomer
+	 * @param \Magento\Directory\Model\CountryFactory $countryFactory
+	 * @param \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderCollectionFactory
+	 * @param \Magento\Framework\Url $urlHelper
+	 */
     public function __construct(
+		Magento\Newsletter\Model\Subscriber $subscriber,
         \Ebizmarts\MailChimp\Helper\Data $helper,
         \Magento\Quote\Model\ResourceModel\Quote\CollectionFactory $quoteColletcion,
         \Magento\Customer\Model\CustomerFactory $customerFactory,
@@ -79,7 +85,7 @@ class Cart
         \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderCollectionFactory,
         \Magento\Framework\Url $urlHelper
     ) {
-    
+		$this->subscriber   			= $subscriber;
         $this->_helper                  = $helper;
         $this->_quoteCollection         = $quoteColletcion;
         $this->_customerFactory         = $customerFactory;
@@ -583,10 +589,21 @@ class Cart
     }
     protected function _getCustomer(\Magento\Quote\Model\Quote $cart, $mailchimpStoreId, $magentoStoreId)
     {
+		$subscribed = false;
+    	if($this->_apiCustomer->getOptin($magentoStoreId)) {
+			$subscribed = true;
+		} else {
+			$checkSubscriber = $this->subscriber->loadByEmail($cart->getCustomerEmail());
+			if ($checkSubscriber->isSubscribed()) {
+				// Customer is subscribed on Magento Newsletter, so let's subscribe on Mailchimp too
+				$subscribed = true;
+			}
+		}
+
         $customer = [
             'id' => hash('md5', strtolower($cart->getCustomerEmail())),
             'email_address' => $cart->getCustomerEmail(),
-            'opt_in_status' => $this->_apiCustomer->getOptin($magentoStoreId)
+            'opt_in_status' => $subscribed
         ];
 
         $firstName = $cart->getCustomerFirstname();

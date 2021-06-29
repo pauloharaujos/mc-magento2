@@ -80,22 +80,27 @@ class Order
     protected $_counter;
 
     protected $_batchId;
+	/**
+	 * @var \Magento\Newsletter\Model\Subscriber
+	 */
+	protected $subscriber;
 
-    /**
-     * Order constructor.
-     * @param \Ebizmarts\MailChimp\Helper\Data $helper
-     * @param \Magento\Sales\Model\OrderRepository $order
-     * @param \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderCollectionFactory
-     * @param \Magento\Catalog\Model\ResourceModel\Product $product
-     * @param Product $apiProduct
-     * @param Customer $apiCustomer
-     * @param \Magento\Catalog\Model\ProductFactory $productFactory
-     * @param \Magento\Directory\Model\CountryFactory $countryFactory
-     * @param \Ebizmarts\MailChimp\Model\MailChimpSyncEcommerce $chimpSyncEcommerce
-     * @param \Magento\SalesRule\Model\Coupon $couponRepository
-     * @param RuleRepository $ruleRepository
-     * @param \Magento\Framework\Url $urlHelper
-     */
+	/**
+	 * Order constructor.
+	 * @param \Ebizmarts\MailChimp\Helper\Data $helper
+	 * @param \Magento\Sales\Model\OrderRepository $order
+	 * @param \Magento\Sales\Model\ResourceModel\Order\CollectionFactory $orderCollectionFactory
+	 * @param \Magento\Catalog\Model\ResourceModel\Product $product
+	 * @param Product $apiProduct
+	 * @param Customer $apiCustomer
+	 * @param \Magento\Catalog\Model\ProductFactory $productFactory
+	 * @param \Magento\Directory\Model\CountryFactory $countryFactory
+	 * @param \Ebizmarts\MailChimp\Model\MailChimpSyncEcommerce $chimpSyncEcommerce
+	 * @param \Magento\SalesRule\Model\Coupon $couponRepository
+	 * @param RuleRepository $ruleRepository
+	 * @param \Magento\Framework\Url $urlHelper
+	 * @param \Magento\Newsletter\Model\Subscriber $subscriber
+	 */
     public function __construct(
         \Ebizmarts\MailChimp\Helper\Data $helper,
         \Magento\Sales\Model\OrderRepository $order,
@@ -108,9 +113,10 @@ class Order
         \Ebizmarts\MailChimp\Model\MailChimpSyncEcommerce $chimpSyncEcommerce,
         \Magento\SalesRule\Model\Coupon $couponRepository,
         \Magento\SalesRule\Model\RuleRepository $ruleRepository,
-        \Magento\Framework\Url $urlHelper
+        \Magento\Framework\Url $urlHelper,
+		\Magento\Newsletter\Model\Subscriber $subscriber
     ) {
-    
+
         $this->_helper          = $helper;
         $this->_order           = $order;
         $this->_orderCollectionFactory = $orderCollectionFactory;
@@ -125,6 +131,7 @@ class Order
         $this->_urlHelper    = $urlHelper;
         $this->couponRepository = $couponRepository;
         $this->ruleRepository = $ruleRepository;
+		$this->subscriber   = $subscriber;
     }
 
     /**
@@ -414,11 +421,22 @@ class Order
             return "";
         }
 
+		$subscribed = false;
+        if($this->_apiCustomer->getOptin($magentoStoreId)) {
+			$subscribed = true;
+		} else {
+			$checkSubscriber = $this->subscriber->loadByEmail($order->getCustomerEmail());
+			if ($checkSubscriber->isSubscribed()) {
+				$subscribed = true; // Customer is subscribed on Magento Newsletter, so let's subscribe on Mailchimp too
+			}
+		}
+
+
         //customer data
         $data['customer'] = [
             'id' => hash('md5', strtolower($order->getCustomerEmail())),
             'email_address' => $order->getCustomerEmail(),
-            'opt_in_status' => $this->_apiCustomer->getOptin($magentoStoreId)
+            'opt_in_status' => $subscribed
         ];
 
         $data['order_url'] = $this->_urlHelper->getUrl(
@@ -564,7 +582,7 @@ class Order
             ['neq' => \Magento\Sales\Model\Order::STATE_CANCELED],
             ['neq' => \Magento\Sales\Model\Order::STATE_CLOSED]])
             ->addAttributeToFilter('customer_email', ['eq' => $order->getCustomerEmail()]);
-        
+
         $orderCollection
             ->getSelect()
             ->reset(\Zend_Db_Select::COLUMNS)
